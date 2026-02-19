@@ -1,4 +1,3 @@
-[Uploading medconnect (1).html…]()
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -327,7 +326,6 @@ var DOCS=[
   {id:6,name:'Алексей Кузнецов',spec:'Эндокринолог',ini:'АК',exp:'11 лет',rat:'4.6',price:'1100 &#x20BD;',tags:['Диабет','Щитовидка','Гормоны'],online:false}
 ];
 var TIMES=['09:00','09:30','10:00','10:30','11:00','11:30','14:00','14:30','15:00','15:30','16:00','16:30'];
-var REPLIES=['Понял вас, спасибо.','Хорошо, давайте разберёмся.','Уточните симптомы подробнее?','Принято, изучу и отвечу.','Это важно учесть.'];
 var PCARDS={
   'p1':{name:'Иван Иванов',dob:'15.03.1988',age:'37 лет',blood:'A(II) Rh+',height:'178 см',weight:'82 кг',allergy:'Пенициллин',chronic:'Гипертония I ст.',phone:'+7 (999) 123-45-67',email:'ivanov@mail.ru',hist:[{date:'10 фев 2026',title:'Консультация невролога',desc:'Мигрень. Назначен Суматриптан 50мг.'},{date:'15 янв 2026',title:'Общий анализ крови',desc:'Гемоглобин 142, норма.'},{date:'20 дек 2025',title:'Консультация терапевта',desc:'ОРВИ. Больничный 7 дней.'},{date:'5 ноя 2025',title:'ЭКГ',desc:'Синусовый ритм, норма.'}]},
   'p2':{name:'Мария Сидорова',dob:'22.07.1997',age:'28 лет',blood:'B(III) Rh-',height:'165 см',weight:'57 кг',allergy:'Нет',chronic:'ОРВИ (повторное)',phone:'+7 (916) 234-56-78',email:'sidorova@mail.ru',hist:[{date:'15 фев 2026',title:'Консультация терапевта',desc:'ОРВИ. Назначен Амоксициллин.'},{date:'3 янв 2026',title:'Общий анализ мочи',desc:'Без патологий.'},{date:'10 ноя 2025',title:'Флюорография',desc:'Патологий не выявлено.'}]},
@@ -376,7 +374,7 @@ function initApp(){
   var pages=U.role==='patient'?[['dash','Главная'],['docs','Врачи'],['appts','Приёмы'],['chat','Чат','2'],['card','Карточка']]:[['dash','Главная'],['appts','Приёмы'],['chat','Чат'],['card','Пациенты']];
   var h='';for(var i=0;i<pages.length;i++){var p=pages[i];h+='<button class="nb" id="nb-'+p[0]+'" onclick="goPage(\''+p[0]+'\')">'+(p[1])+(p[2]?'<span class="nbadge">'+p[2]+'</span>':'')+'</button>'}
   document.getElementById('hnav').innerHTML=h;
-  buildDash();buildDocs();buildAppts();buildChat();buildCard();goPage('dash');
+  U._init=false;buildDash();buildDocs();buildAppts();buildChat();buildCard();U._init=true;goPage('dash');
   setInterval(function(){if(U)document.getElementById('dbbar').textContent='  MedConnect DB — '+DB.appts.length+' записей, '+Object.keys(DB.msgs).length+' диалогов';},4000);
 }
 
@@ -385,6 +383,10 @@ function goPage(id){
   document.querySelectorAll('.nb').forEach(function(b){b.classList.remove('on')});
   var pg=document.getElementById('pg-'+id),nb=document.getElementById('nb-'+id);
   if(pg)pg.classList.add('on');if(nb)nb.classList.add('on');
+  if(id==="chat"&&U._init)buildChat();
+  if(id==="card"&&U._init)buildCard();
+  if(id==="appts"&&U._init)buildAppts();
+  if(id==="dash"&&U._init)buildDash();
 }
 
 // DASHBOARD
@@ -395,7 +397,7 @@ function buildDash(){
   var my=getMyAppts();
   var pend=isDoc?DB.appts.filter(function(a){return a.status==='pending'&&a.did===U.uid}).length:my.filter(function(a){return a.status==='pending'}).length;
   var active=my.filter(function(a){return a.status==='confirmed'||a.status==='pending'});
-  var stats=isDoc?[['&#128197;',DB.appts.length+'','Всего записей'],['&#9203;',pend+'','Ожидают подтверждения'],['&#128172;','8','Новых сообщений']]:[['&#128197;',active.length+'','Активных приёмов'],['&#9203;',pend+'','Ожидают'],['&#10084;','Норм.','Самочувствие']];
+  var stats=isDoc?[['&#128197;',DB.appts.length+'','Всего записей'],['&#9203;',pend+'','Ожидают подтверждения'],['&#128172;',Object.keys(DB.msgs).length+'','Диалогов в чате']]:[['&#128197;',active.length+'','Активных приёмов'],['&#9203;',pend+'','Ожидают'],['&#10084;','Норм.','Самочувствие']];
   var h='';for(var i=0;i<stats.length;i++)h+='<div class="scard"><div class="sico">'+stats[i][0]+'</div><div class="sval">'+stats[i][1]+'</div><div class="slbl">'+stats[i][2]+'</div></div>';
   document.getElementById('dstats').innerHTML=h;
   var up=active.slice(0,3);
@@ -504,13 +506,30 @@ function confirmBook(){
   var date=document.getElementById('bdate').value;
   var reason=(document.getElementById('breason').value||'').trim()||'Консультация';
   DB.appts.unshift({id:'a'+Date.now(),pid:U.uid,pname:U.name,did:SDOC.id,dname:SDOC.name,spec:SDOC.spec,date:date,time:STIME,status:'pending',reason:reason,ts:Date.now()});
-  dbSave();closeM('bmodal');buildAppts();buildDash();goPage('appts');
+  dbSave();closeM('bmodal');buildDash();goPage('appts');
   toast('Запись к '+SDOC.name+' отправлена — ожидайте подтверждения','green');
 }
 
 // CHAT
+function getChatContacts(){
+  if(U.role==='patient'){
+    var seen={},contacts=[];
+    DB.appts.filter(function(a){return a.pid===U.uid}).forEach(function(a){
+      if(!seen[a.did]){seen[a.did]=1;var doc=DOCS.find(function(d){return d.id===a.did});if(doc)contacts.push({id:'p1-'+a.did,name:doc.name,ini:doc.ini});}
+    });
+    if(!contacts.length)contacts=DOCS.slice(0,3).map(function(d){return{id:'p1-'+d.id,name:d.name,ini:d.ini}});
+    return contacts;
+  }else{
+    var seen2={},contacts2=[];
+    DB.appts.filter(function(a){return a.did===U.uid}).forEach(function(a){
+      if(!seen2[a.pid]){seen2[a.pid]=1;var pt=PATIENTS.find(function(p){return p.id===a.pid});if(pt){var ini=pt.name.split(' ').map(function(w){return w[0]}).join('');contacts2.push({id:a.pid+'-'+U.uid,name:pt.name,ini:ini});}}
+    });
+    if(!contacts2.length)contacts2=PATIENTS.slice(0,3).map(function(p){var ini=p.name.split(' ').map(function(w){return w[0]}).join('');return{id:p.id+'-1',name:p.name,ini:ini}});
+    return contacts2;
+  }
+}
 function buildChat(){
-  var contacts=U.role==='patient'?[{id:'p1-1',name:'Анна Петрова',ini:'АП'},{id:'p1-2',name:'Михаил Соколов',ini:'МС'},{id:'p1-3',name:'Елена Воронова',ini:'ЕВ'}]:[{id:'p1-1',name:'Иван Иванов',ini:'ИИ'},{id:'p4-1',name:'Светлана Ким',ini:'СК'},{id:'p2-1',name:'Мария Сидорова',ini:'МС'}];
+  var contacts=getChatContacts();
   var h='';contacts.forEach(function(c,i){
     var ml=DB.msgs[c.id]||[],last=ml.length?ml[ml.length-1].t:'Нет сообщений';
     h+='<div class="cc'+(i===0?' on':'')+'" onclick="openChat(\''+c.id+'\',\''+c.name+'\',\''+c.ini+'\')" id="cc'+i+'"><div class="av" style="width:34px;height:34px;font-size:12px">'+c.ini+'</div><div class="cinfo"><div class="cname">'+c.name+'</div><div class="cmsg">'+last+'</div></div>'+(i<2?'<div class="udot"></div>':'')+'</div>';
